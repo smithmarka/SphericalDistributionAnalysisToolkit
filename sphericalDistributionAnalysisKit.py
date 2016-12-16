@@ -1,94 +1,213 @@
+#!/usr/bin/env python
+
+# ########################## Copyrights and license ############################
+#                                                                              #
+# Copyright 2013 Vincent Jacques <vincent@vincent-jacques.net>                 #
+#                                                                              #
+# This file is part of PyGithub.                                               #
+# http://pygithub.github.io/PyGithub/v1/index.html                             #
+#                                                                              #
+# PyGithub is free software: you can redistribute it and/or modify it under    #
+# the terms of the GNU Lesser General Public License as published by the Free  #
+# Software Foundation, either version 3 of the License, or (at your option)    #
+# any later version.                                                           #
+#                                                                              #
+# PyGithub is distributed in the hope that it will be useful, but WITHOUT ANY  #
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS    #
+# FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more #
+# details.                                                                     #
+#                                                                              #
+# You should have received a copy of the GNU Lesser General Public License     #
+# along with PyGithub. If not, see <http://www.gnu.org/licenses/>.             #
+#                                                                              #
+# ##############################################################################
+
 import sys
 import os.path
-import time
-from SphericalDistribution import *
+import datetime
+import pandas as pd
+import numpy as np
+from SphericalDistribution import SphericalDistribution
+
 
 def main(argv):
+
+	# print(datetime.datetime.now())
+	# return
+	# Output Syntax
 	if len(argv) < 2:
 		msg = "Syntax: python sphericalDistributionAnalysisKit.py "
-		msg = msg + "inputPath [--GenerateVisualizations] [--GenerateGraphs]"
+		msg += "inputPath [--GenerateVisualizations=visualizationPath] "
+		msg += "[--GenerateGraphs=graphPath] [--GenerateWaveFront] "
+		msg += "[--MetricsOutput]"
 		print(msg)
 		return
 
-	inputFiles = []
+	# Input path always first argument
 	inputPath = argv[1]
 
-	# Validate input path exists and get a list of files
+	visualizationOutputPath = './Visualization/'
+	outputPath = "./Metrics-Output.csv"
+	graphsOutputPath = "./Graphs/"
+
+	visualizationFlag = False
+	graphFlag = False
+	wavefrontFlag = False
+	cleanDataFlag = False
+
+	# Parse the input arguments
+	for i in range(2, len(argv)):
+		argPri = argv[i]
+		argSec = None
+		if i + 1 < len(argv):
+			argSec = argv[i + 1]
+
+		if argPri[0] is '-':
+			if argPri[1] is 'o':
+				if argSec is None or argSec[0] is '-':
+					print('ERROR - Invalid output path')
+					return
+				outputPath = argSec
+			elif argPri[1] is 'v':
+				visualizationFlag = True
+				if argSec is None or argSec[0] is '-':
+					print('ERROR - Invalid visualization path')
+					return
+				visualizationOutputPath = argSec
+			elif argPri[1] is 'g':
+				graphFlag = True
+				if argSec is None or argSec[0] is '-':
+					print('ERROR - Invalid graph path')
+					return
+				graphsOutputPath = argSec
+			elif argPri[1] is 'c':
+				cleanDataFlag = True
+
+	print("Input Path: {}".format(inputPath))
+	print("Output Path: {}".format(outputPath))
+	print("Visualization Path: {}".format(visualizationOutputPath))
+	# print("Wavefront Path: {}".format(generateWaveFrontPath))
+	
+
+	metricData = None
+
+	# If the clean data flag is set to true do not load data, we want to recalcuate
+	# all metrics 
+	if cleanDataFlag is False:
+		metricData = loadExistingMetricData(outputPath)
+
+	# Build recursive list of input files from the provided input path
+	inputFiles = createInputFileList(inputPath, True)
+
+	distributionDict = {}
+
+	# Create a Spherical Distribution object for each input file
+	for inputFilePath in inputFiles:
+
+		# Create arguments dictionary and distribution object
+		sdArgs = {}
+		sdArgs['DataFilePath'] = inputFilePath
+		sdArgs['RuntimeDataFilePath'] = inputFilePath + '-runtime'
+		dist = SphericalDistribution(sdArgs)
+
+		# Only add the distribution to the dictionary for processing if it doesn't
+		# already exist in the dictionary
+		if metricData is None or len(metricData[metricData['DataSetName'] == dist.DataSetName]) == 0:
+			distributionDict[dist.DataSetName] = dist
+
+	# Process each distributon in the dictionary, saving results to file
+	for distKey in sorted(distributionDict.keys()):
+
+		distName = distributionDict[distKey].DataSetName
+
+		startTime = datetime.datetime.now()
+		print("\t * Started processing distribution {} at {}".format(distName, startTime))
+
+		# Load the distribution data and calculate the metrics
+		distributionDict[distKey].loadData()
+		distributionDict[distKey].calculateMetrics()
+
+		# Output metrics to file after each distribution is processed
+		metricData = addResultToMetrics(distributionDict[distKey], metricData)
+		metricData.to_csv(outputPath)
+
+		endTime = datetime.datetime.now()
+		processTime = endTime - startTime
+		print("\t * Finished processing distribution {} at {}....Processing time: {}".format(distName, endTime, processTime))
+
+
+def createInputFileList(inputPath, recursiveSearch):
+	inputFiles = []
+	# If inputPath is directory iterate through each item
 	if os.path.isdir(inputPath) is True:
+		# Get 
 		fileList = os.listdir(inputPath)
 		fileList.sort()
+
 		for file in fileList:
-			if os.path.isfile(os.path.join(inputPath, file)):
-				inputFiles.append(os.path.join(inputPath, file))
+			filePath = os.path.join(inputPath, file)
+			if os.path.isdir(filePath) is True and recursiveSearch is True:
+				subInputFiles = createInputFileList(filePath, recursiveSearch)
+
+				for subFile in subInputFiles:
+					inputFiles.append(subFile)
+
+			elif os.path.isfile(filePath) and "-runtime" not in filePath:
+				inputFiles.append(filePath)
 	elif os.path.isfile(inputPath) is True:
 		inputFiles.append(inputPath)
 	else:
 		print("Error - inputPath is not a valid folder or file")
 		return
-
-	visualizationOutputPath = None
-	metricsOutputPath = "./Results/"
-	graphsOutputPath = None
-
-	for i in range(2, len(argv)):
-		splitArg = argv[i].split('=')
-
-		if len(splitArg) != 2:
-			print("Error - invalid syntax at argument: " + argv[i])
-			return
-
-		if splitArg[0] == "--GenerateVisualizations":
-			visualizationOutputPath = splitArg[1]
-			continue
-
-		if splitArg[0] == "--GenerateGraphs":
-			graphsOutputPath = splitArg[1]
-			continue
-
-		if splitArg[0] == "--MetricsOutput":
-			metricsOutputPath = splitArg[1]
-			continue
-
-	distributionArray = []
-
-	for inputFilePath in inputFiles:
-		startTime = time.clock()
-		print("Start Processing: " + inputFilePath + " at " + str(startTime))
-		dist = SphericalDistribution(inputFilePath)
-		distributionArray.append(dist)
-		endTime = time.clock()
-		print("Finished Processing: " + inputFilePath + " at " + str(startTime))
-		print("\t\tRun Time: " + str(endTime - startTime))
+	return inputFiles
 
 
+def loadExistingMetricData(metricsPath):
+	metricData = None
 
-	outputData(distributionArray, metricsOutputPath)
+	if os.path.isfile(metricsPath):
+		print("* Loading existing Metric data from {}".format(outputPath))
+		metricData = pd.read_csv(metricsPath)
+	else:
+		print("* ERROR")
+	return metricData
 
-def outputData(distributionArray, outputFolderPath):
 
-	try:
-		os.stat(outputFolderPath)
-		# fileList = os.listdir(inputPath)
-		# for file in fileList:
-		# 	os.remove(file)
-	except:
-		os.mkdir(outputFolderPath)
+def addResultToMetrics(dist, metricData):
 
-	for dist in distributionArray:
-		outputFilePath = outputFolderPath + dist.DataSetName + ".csv"
-		outputLine = None
+	resultArray = []
+	resultArray.append("DataSetName")
+	resultArray.append("NumPoints")
+	resultArray.append("Iterations")
+	resultArray.append("Method")
+	resultArray.append("ExecutionNumber")
+	resultArray.append("AverageRunTime")
+	resultArray.append("ClocksPerSecond")
+	resultArray.append("SeparationDistance")
+	resultArray.append("CoveringRadius")
+	resultArray.append("MeshSeparationRatio")
 
-		if os.path.isfile(outputFilePath) is False:
-			outputLine = dist.outputMetrics(True)
-			outputFile = open(outputFilePath, "a")
-			outputFile.write(outputLine + "\n")
-		else:
-			outputFile = open(outputFilePath, "a")
+	# Create array of distribution results
+	distResult = []
+	distResult.append(dist.DataSetName)
+	distResult.append(len(dist.Voronoi.points))
+	distResult.append(dist.NumberIterations)
+	distResult.append(dist.Method)
+	distResult.append(dist.ExecutionNumber)
+	distResult.append(dist.AverageRunTime)
+	distResult.append(dist.ClocksPerSecond)
+	distResult.append(dist.SeparationDistance)
+	distResult.append(dist.CoveringRadius)
+	distResult.append(dist.MeshSeparationRatio)
 
-		outputLine = dist.outputMetrics(False)
-		outputFile.write(outputLine + "\n")
-		outputFile.close()
+	# Create pandas dataframe from distribution result
+	distData = pd.DataFrame([distResult], columns=resultArray)
+	
+	if metricData is None:
+		return distData
 
+	# Append the distribution data and return all metric data
+	return metricData.append(distData)
 
 
 if __name__ == '__main__':

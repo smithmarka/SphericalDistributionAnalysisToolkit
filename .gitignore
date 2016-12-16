@@ -4,6 +4,3 @@ lib/
 lib64
 pip-selfcheck.json
 pyvenv.cfg
-scipy/
-get-pip.py
-Results/

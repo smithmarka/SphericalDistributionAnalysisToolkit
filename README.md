@@ -11,10 +11,6 @@ Metrics
 	
 The minimum distance between any two points in the distribution represents the Separation Distance. The greater the value the more even the distribution. To calculate this value the kit uses a simple double loop through each of the points in the distribution, computing the haversine distance between every combination of points except distance(pointX, pointX). The minimum distance found in this double loop becomes the Separation Distance for the distribution. For larger point distributions this might become an unrealistic approach, and since we already compute the Voronoi diagram below a future update may replace this algorithm.
 
-* Packing Radius (Larger Result = More Even Distribution)
-	
-The Packing Radius is closely related to the Separation distance and represents essentially the same information. It is calculated by dividing the Separation Distance by two. The greater the value the more even the distribution.
-
 * Covering Radius (Mesh Norm) (Smaller Result = More Even Distribution)
 
 The Covering Radius measures the minimum of the maximum distance between any neighbouring points, also referred to as the Mesh Norm. To calculate this value the kit uses the scipy.spatial library to generate a object used to represent the Voronoi diagram. The kit looks at each vertice and determines which Voronoi regions it belongs to. The for each of these regions it calculates the haversine distance between the vertice and the point that was used to generate the Voronoi region. The local minimum is determined for each region, and from this a global maximum is determine which is used as the Covering Radius.
@@ -52,8 +48,21 @@ Installation
 
 Running Spherical Distribution Analysis Kit
 ------
+source ./bin/activate
+python sphericalDistributionAnalysisKit.py inputFolderPath [--MetricsOutput=MetricsOutputFolder] [--GenerateWaveFront=WaveFrontFolder]
 
+This program was built in a pyvenv virtual environment. Unless you have all the proper python libraries installed on your machine you should run it within the context of the virtual environment by executing the first line before the second.
 
+The program will recursively search each folder in the inputFolderPath loading the data from each CSV file of X, Y, Z coordinates found. The values of each metric described above will be calculated by the program and outputted to MetricsOutputFolder/Results.csv. If a '-runtime' file is located in the same directory as the input file then the runtimes will be added to the metrics output. If the optional WaveFrontFolder is set then a Wavefront file will be generated for every distribution processed by the kit. Note that if you select this option and you have a large number of distributions you will quickly fill up your drive with what is essentially a copy of the original data.
+
+The wavefront files can be used to generate visualizations using blender (you will have to install blender) with the following command:
+	- blender render.blend --background --python generateBlenderVisualizations.py --InputFolderPath=../Wavefront/ --OutputFolderPath=../Visualizations/
+
+To generate the final results you can use the command:
+	source ./bin/activate
+	python generateGraphs.py ../Results/
+
+This will output a number of png files of the graphs and a number of CSV files with the data used to generate those graphs.
 
 
 

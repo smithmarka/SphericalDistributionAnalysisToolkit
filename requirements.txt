@@ -1,0 +1,14 @@
+numpy==1.11.2
+Cython==0.25.1
+scipy==0.18.1
+Jinja2==2.8
+MarkupSafe==0.23
+cycler==0.10.0
+future==0.16.0
+make-deb==0.0.5
+matplotlib==1.5.3
+pandas==0.19.1
+pyparsing==2.1.10
+python-dateutil==2.5.3
+pytz==2016.7
+six==1.10.0
